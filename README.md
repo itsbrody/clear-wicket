@@ -66,54 +66,71 @@ All configuration is via environment variables.
 
 ## Deployment Variants
 
-### Variant A — Shared (Authelia-like)
+The Quick Start above shows a single app behind a single Clear Wicket container. The following variants show how to scale that to multiple apps. Pick one variant and put everything into a single `docker-compose.yml` alongside Traefik and your apps. The snippets below only show the parts that change (Traefik labels, volumes, and TLS config still apply as above).
 
-One Clear Wicket instance with `COOKIE_DOMAIN=.example.com`. A single TOTP secret protects all apps under `*.example.com`. One login grants access everywhere.
+Complete, ready-to-use Compose files: [`examples/docker-compose.shared.yml`](examples/docker-compose.shared.yml) (Variant A) and [`examples/docker-compose.isolated.yml`](examples/docker-compose.isolated.yml) (Variant B).
+
+### Variant A — Shared SSO
+
+One Clear Wicket container, one TOTP secret, one login for all apps.
+
+You run a single `clear-wicket` container with a wildcard cookie domain (`.example.com`). All apps point their Traefik middleware at that one container. One TOTP code unlocks every app under `*.example.com` — same authenticator entry, same session cookie.
 
 ```yaml
 services:
   clear-wicket:
+    image: ghcr.io/itsbrody/clear-wicket:latest
     environment:
-      COOKIE_DOMAIN: .example.com
+      COOKIE_DOMAIN: .example.com         # wildcard: cookie valid for all subdomains
       AUTH_HOST: auth.example.com
+    volumes:
+      - wicket-data:/data                 # one volume = one TOTP secret
 
   app1:
     labels:
-      - traefik.http.routers.app1.middlewares=wicket-auth
-
-  app2:
-    labels:
-      - traefik.http.routers.app2.middlewares=wicket-auth
+      - traefik.http.routers.app1.middlewares=wicket-auth  # ─┐ both apps use
+                                                               # │ the same middleware
+  app2:                                                        # │ → same container
+    labels:                                                    # │ → same TOTP secret
+      - traefik.http.routers.app2.middlewares=wicket-auth  # ─┘
 ```
 
 ### Variant B — Per-App Isolation
 
-Each app gets its own Clear Wicket instance with its own TOTP secret and a per-app `COOKIE_DOMAIN`. Login to one app does not grant access to another.
+One Clear Wicket container per app, each with its own TOTP secret.
+
+You run a separate `clear-wicket` container for each app you want to protect. Each container has its own data volume (= its own TOTP secret and backup codes), its own cookie domain, and its own auth hostname. In your authenticator app, each shows up as a separate entry. Logging in to one app does not grant access to another.
 
 ```yaml
 services:
+  # Container 1: Clear Wicket instance for app1
   wicket-app1:
+    image: ghcr.io/itsbrody/clear-wicket:latest
     environment:
-      COOKIE_DOMAIN: app1.example.com
+      COOKIE_DOMAIN: app1.example.com     # scoped to app1 only
       AUTH_HOST: auth-app1.example.com
     volumes:
-      - wicket-app1-data:/data
+      - wicket-app1-data:/data            # own volume = own TOTP secret
 
+  # Container 2: Clear Wicket instance for app2
   wicket-app2:
+    image: ghcr.io/itsbrody/clear-wicket:latest
     environment:
-      COOKIE_DOMAIN: app2.example.com
+      COOKIE_DOMAIN: app2.example.com     # scoped to app2 only
       AUTH_HOST: auth-app2.example.com
     volumes:
-      - wicket-app2-data:/data
+      - wicket-app2-data:/data            # own volume = own TOTP secret
 
   app1:
     labels:
-      - traefik.http.routers.app1.middlewares=wicket-app1-auth
+      - traefik.http.routers.app1.middlewares=wicket-app1-auth  # → wicket-app1 container
 
   app2:
     labels:
-      - traefik.http.routers.app2.middlewares=wicket-app2-auth
+      - traefik.http.routers.app2.middlewares=wicket-app2-auth  # → wicket-app2 container
 ```
+
+At <15 MB per container, running one per app is negligible overhead.
 
 ### Do Not Mix Variants
 
