@@ -32,6 +32,7 @@ h1{font-size:1.25rem;margin-bottom:.5rem;text-align:center}
 <a href="data:text/plain;charset=utf-8,{{.CodesText}}" download="clear-wicket-backup-codes.txt" onclick="this.textContent='Heruntergeladen';this.style.background='#c8e6c9';this.style.borderColor='#a5d6a7'">Herunterladen</a>
 <form method="POST" action="{{.ConfirmAction}}" style="flex:1;display:flex">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+{{if .Redirect}}<input type="hidden" name="rd" value="{{.Redirect}}">{{end}}
 <button type="submit" style="width:100%">Ich habe die Codes gesichert</button>
 </form>
 </div>

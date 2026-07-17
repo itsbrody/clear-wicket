@@ -31,6 +31,7 @@ button:hover{background:#3a7bc8}
 <div class="secret">{{.Secret}}</div>
 <form method="POST" action="/setup">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+{{if .Redirect}}<input type="hidden" name="rd" value="{{.Redirect}}">{{end}}
 <label for="code">Code eingeben zum Bestätigen</label>
 <input type="text" id="code" name="code" placeholder="000000" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code" autofocus required>
 <button type="submit">Bestätigen</button>

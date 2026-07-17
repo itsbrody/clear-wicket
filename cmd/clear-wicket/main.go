@@ -19,6 +19,8 @@ import (
 	"github.com/itsbrody/clear-wicket/internal/store"
 )
 
+const Version = "1.0.0"
+
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -76,6 +78,8 @@ func runServer() {
 	}
 
 	go sessionCleanup(st)
+
+	log.Printf("Clear Wicket %s starting on %s", Version, cfg.ListenAddr)
 
 	srv := server.New(cfg, st)
 	log.Fatal(srv.ListenAndServe())

@@ -62,7 +62,12 @@ func (s *Server) authFail(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	complete, _ := s.store.IsSetupComplete()
 	if !complete {
-		http.Redirect(w, r, "/setup", http.StatusFound)
+		rd := r.URL.Query().Get("rd")
+		target := "/setup"
+		if rd != "" {
+			target += "?rd=" + url.QueryEscape(rd)
+		}
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 
@@ -214,6 +219,7 @@ func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 		"Secret":    secret,
 		"CSRFToken": csrfToken,
 		"Error":     r.URL.Query().Get("error"),
+		"Redirect":  r.URL.Query().Get("rd"),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	templates.ExecuteTemplate(w, "setup.html", data)
@@ -231,21 +237,27 @@ func (s *Server) handleSetupSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rd := r.FormValue("rd")
+	rdQuery := ""
+	if rd != "" {
+		rdQuery = "&rd=" + url.QueryEscape(rd)
+	}
+
 	if !s.validateCSRF(r) {
-		http.Redirect(w, r, "/setup?error="+url.QueryEscape("Ungültiges CSRF-Token"), http.StatusFound)
+		http.Redirect(w, r, "/setup?error="+url.QueryEscape("Ungültiges CSRF-Token")+rdQuery, http.StatusFound)
 		return
 	}
 
 	secret, err := s.store.GetPendingSecret()
 	if err != nil {
-		http.Redirect(w, r, "/setup?error="+url.QueryEscape("Kein ausstehender Setup-Vorgang. Bitte erneut starten."), http.StatusFound)
+		http.Redirect(w, r, "/setup?error="+url.QueryEscape("Kein ausstehender Setup-Vorgang. Bitte erneut starten.")+rdQuery, http.StatusFound)
 		return
 	}
 	code := strings.TrimSpace(r.FormValue("code"))
 
 	result := auth.ValidateTOTP(secret, code, s.cfg.TOTPSkew, 0)
 	if !result.Valid {
-		http.Redirect(w, r, "/setup?error="+url.QueryEscape("Ungültiger Code. Bitte erneut versuchen."), http.StatusFound)
+		http.Redirect(w, r, "/setup?error="+url.QueryEscape("Ungültiger Code. Bitte erneut versuchen.")+rdQuery, http.StatusFound)
 		return
 	}
 
@@ -277,6 +289,7 @@ func (s *Server) handleSetupSubmit(w http.ResponseWriter, r *http.Request) {
 		"CodesText":     codesText,
 		"CSRFToken":     csrfToken,
 		"ConfirmAction": "/setup/confirm",
+		"Redirect":      rd,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	templates.ExecuteTemplate(w, "setup_backup.html", data)
@@ -298,8 +311,14 @@ func (s *Server) handleSetupConfirmBackups(w http.ResponseWriter, r *http.Reques
 	}
 	s.store.ClearPendingSecret()
 
+	rd := r.FormValue("rd")
+	target := "/login"
+	if rd != "" {
+		target += "?rd=" + url.QueryEscape(rd)
+	}
+
 	log.Println("Setup completed")
-	http.Redirect(w, r, "/login", http.StatusFound)
+	http.Redirect(w, r, target, http.StatusFound)
 }
 
 func (s *Server) handleRegenerateBackupCodesPage(w http.ResponseWriter, r *http.Request) {
