@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# Variant A — Shared: One Clear Wicket instance protects all apps under *.test.local
+services:
+  traefik:
+    image: traefik:v3.6
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  clear-wicket:
+    build: ..
+    environment:
+      COOKIE_DOMAIN: .test.local
+      AUTH_HOST: wicket.test.local
+      DATA_DIR: /data
+    volumes:
+      - wicket-data:/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.wicket.rule=Host(`wicket.test.local`)
+      - traefik.http.routers.wicket.entrypoints=web
+      - traefik.http.services.wicket.loadbalancer.server.port=4181
+      - traefik.http.middlewares.wicket-auth.forwardauth.address=http://clear-wicket:4181/auth
+      - traefik.http.middlewares.wicket-auth.forwardauth.authResponseHeaders=Remote-User
+
+  app1:
+    image: traefik/whoami
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.app1.rule=Host(`app1.test.local`)
+      - traefik.http.routers.app1.entrypoints=web
+      - traefik.http.routers.app1.middlewares=wicket-auth
+
+  app2:
+    image: traefik/whoami
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.app2.rule=Host(`app2.test.local`)
+      - traefik.http.routers.app2.entrypoints=web
+      - traefik.http.routers.app2.middlewares=wicket-auth
+
+volumes:
+  wicket-data:
