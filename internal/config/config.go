@@ -15,14 +15,15 @@ import (
 )
 
 type Config struct {
-	CookieDomain string
-	CookieSecret []byte
-	SessionTTL   time.Duration
-	AuthHost     string
-	DataDir      string
-	TOTPSkew     uint
-	TOTPSecret   string
-	ListenAddr   string
+	CookieDomain   string
+	CookieSecret   []byte
+	SessionTTL     time.Duration
+	AuthHost       string
+	DataDir        string
+	TOTPSkew       uint
+	TOTPSecret     string
+	ListenAddr     string
+	InsecureCookie bool
 }
 
 func Load() (*Config, error) {
@@ -65,6 +66,7 @@ func Load() (*Config, error) {
 
 	cfg.TOTPSecret = os.Getenv("TOTP_SECRET")
 	cfg.ListenAddr = envOrDefault("LISTEN_ADDR", cfg.ListenAddr)
+	cfg.InsecureCookie = os.Getenv("INSECURE_COOKIE") == "true"
 
 	return cfg, nil
 }

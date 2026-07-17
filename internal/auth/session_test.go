@@ -15,7 +15,7 @@ func TestSessionCookie_RoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cookie := NewSessionCookie(sessionID, secret, ".example.com", 24*time.Hour)
+	cookie := NewSessionCookie(sessionID, secret, ".example.com", 24*time.Hour, true)
 
 	parsed, err := ParseSessionCookie(cookie.Value, secret)
 	if err != nil {
@@ -30,7 +30,7 @@ func TestSessionCookie_TamperedSignature(t *testing.T) {
 	secret := []byte("test-secret-32-bytes-long-xxxxx!")
 	sessionID, _ := GenerateSessionID()
 
-	cookie := NewSessionCookie(sessionID, secret, ".example.com", 24*time.Hour)
+	cookie := NewSessionCookie(sessionID, secret, ".example.com", 24*time.Hour, true)
 
 	// Tamper with last character
 	tampered := cookie.Value[:len(cookie.Value)-1] + "X"
@@ -44,7 +44,7 @@ func TestSessionCookie_WrongSecret(t *testing.T) {
 	secret2 := []byte("secret-two-32-bytes-long-xxxxxx!")
 	sessionID, _ := GenerateSessionID()
 
-	cookie := NewSessionCookie(sessionID, secret1, ".example.com", 24*time.Hour)
+	cookie := NewSessionCookie(sessionID, secret1, ".example.com", 24*time.Hour, true)
 
 	if _, err := ParseSessionCookie(cookie.Value, secret2); err == nil {
 		t.Error("cookie signed with different secret should be rejected")
@@ -66,7 +66,7 @@ func TestSessionCookie_Properties(t *testing.T) {
 	secret := []byte("test-secret-32-bytes-long-xxxxx!")
 	sessionID, _ := GenerateSessionID()
 
-	cookie := NewSessionCookie(sessionID, secret, ".example.com", 24*time.Hour)
+	cookie := NewSessionCookie(sessionID, secret, ".example.com", 24*time.Hour, true)
 
 	if !cookie.HttpOnly {
 		t.Error("cookie should be HttpOnly")
@@ -97,7 +97,7 @@ func TestGenerateSessionID_Uniqueness(t *testing.T) {
 }
 
 func TestClearSessionCookie(t *testing.T) {
-	cookie := ClearSessionCookie(".example.com")
+	cookie := ClearSessionCookie(".example.com", true)
 	if cookie.MaxAge != -1 {
 		t.Errorf("expected MaxAge=-1, got %d", cookie.MaxAge)
 	}

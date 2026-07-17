@@ -123,7 +123,7 @@ func TestAuth_ValidSession(t *testing.T) {
 	}
 	st.CreateSession(sess)
 
-	cookie := auth.NewSessionCookie(sessionID, cfg.CookieSecret, cfg.CookieDomain, cfg.SessionTTL)
+	cookie := auth.NewSessionCookie(sessionID, cfg.CookieSecret, cfg.CookieDomain, cfg.SessionTTL, true)
 
 	req, _ := http.NewRequest("GET", ts.URL+"/auth", nil)
 	req.AddCookie(&http.Cookie{Name: cookie.Name, Value: cookie.Value})
@@ -187,7 +187,7 @@ func TestLogout(t *testing.T) {
 	}
 	st.CreateSession(sess)
 
-	cookie := auth.NewSessionCookie(sessionID, cfg.CookieSecret, cfg.CookieDomain, cfg.SessionTTL)
+	cookie := auth.NewSessionCookie(sessionID, cfg.CookieSecret, cfg.CookieDomain, cfg.SessionTTL, true)
 
 	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -317,8 +317,8 @@ func TestOpenRedirectProtection(t *testing.T) {
 	if strings.Contains(loc, "evil.com") {
 		t.Errorf("open redirect not blocked: %s", loc)
 	}
-	if loc != "/" {
-		t.Errorf("expected redirect to /, got %s", loc)
+	if loc != "/status" {
+		t.Errorf("expected redirect to /status, got %s", loc)
 	}
 }
 

@@ -16,6 +16,7 @@ h1{font-size:1.25rem;margin-bottom:.5rem;text-align:center}
 .actions{display:flex;gap:.5rem;margin-top:1rem}
 .actions a,.actions button{flex:1;padding:.75rem;border-radius:4px;font-size:.875rem;text-align:center;text-decoration:none;cursor:pointer}
 .actions a{background:#f0f0f0;color:#333;border:1px solid #ddd}
+.actions a:hover{background:#e0e0e0;border-color:#bbb}
 .actions button{background:#4a90d9;color:#fff;border:none}
 .actions button:hover{background:#3a7bc8}
 </style>
@@ -28,7 +29,7 @@ h1{font-size:1.25rem;margin-bottom:.5rem;text-align:center}
 {{range .Codes}}<div>{{.}}</div>{{end}}
 </div>
 <div class="actions">
-<a href="data:text/plain;charset=utf-8,{{.CodesText}}" download="clear-wicket-backup-codes.txt">Herunterladen</a>
+<a href="data:text/plain;charset=utf-8,{{.CodesText}}" download="clear-wicket-backup-codes.txt" onclick="this.textContent='Heruntergeladen';this.style.background='#c8e6c9';this.style.borderColor='#a5d6a7'">Herunterladen</a>
 <form method="POST" action="{{.ConfirmAction}}" style="flex:1;display:flex">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 <button type="submit" style="width:100%">Ich habe die Codes gesichert</button>

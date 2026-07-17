@@ -61,6 +61,7 @@ All configuration is via environment variables.
 | `TOTP_SKEW` | no | `1` | Time window tolerance (±N windows for clock drift) |
 | `TOTP_SECRET` | no | — | Pre-provision a TOTP secret (base32). Skips web setup |
 | `COOKIE_SECRET` | no | auto | HMAC signing key (hex). Auto-generated and persisted if not set |
+| `INSECURE_COOKIE` | no | `false` | Set `true` for local dev (disables `Secure` flag on cookies) |
 | `LISTEN_ADDR` | no | `:4181` | Listen address |
 
 ## Deployment Variants

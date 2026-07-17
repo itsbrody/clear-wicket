@@ -28,7 +28,7 @@ func GenerateSessionID() (string, error) {
 	return fmt.Sprintf("%x", b), nil
 }
 
-func NewSessionCookie(sessionID string, secret []byte, domain string, ttl time.Duration) *http.Cookie {
+func NewSessionCookie(sessionID string, secret []byte, domain string, ttl time.Duration, secure bool) *http.Cookie {
 	value := signValue(sessionID, secret)
 	return &http.Cookie{
 		Name:     SessionCookieName,
@@ -36,7 +36,7 @@ func NewSessionCookie(sessionID string, secret []byte, domain string, ttl time.D
 		Domain:   domain,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(ttl.Seconds()),
 	}
@@ -66,14 +66,14 @@ func ParseSessionCookie(cookieValue string, secret []byte) (string, error) {
 	return string(sessionID), nil
 }
 
-func ClearSessionCookie(domain string) *http.Cookie {
+func ClearSessionCookie(domain string, secure bool) *http.Cookie {
 	return &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    "",
 		Domain:   domain,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	}

@@ -162,7 +162,7 @@ func (s *Server) handleBackupCodeLogin(w http.ResponseWriter, r *http.Request, u
 		IP:        ip,
 	}
 	s.store.CreateSession(sess)
-	http.SetCookie(w, auth.NewSessionCookie(sessionID, s.cfg.CookieSecret, s.cfg.CookieDomain, s.cfg.SessionTTL))
+	http.SetCookie(w, auth.NewSessionCookie(sessionID, s.cfg.CookieSecret, s.cfg.CookieDomain, s.cfg.SessionTTL, !s.cfg.InsecureCookie))
 
 	if !auth.ValidateRedirectURL(rd, s.cfg.CookieDomain) {
 		rd = "/"
@@ -380,12 +380,31 @@ func (s *Server) handleRegenerateBackupCodes(w http.ResponseWriter, r *http.Requ
 	templates.ExecuteTemplate(w, "setup_backup.html", data)
 }
 
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	sessionID, err := s.getSessionIDFromCookie(r)
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	sess, err := s.store.GetSession(sessionID)
+	if err != nil || time.Now().After(sess.ExpiresAt) {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	data := map[string]any{
+		"UserID": sess.UserID,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templates.ExecuteTemplate(w, "status.html", data)
+}
+
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	sessionID, err := s.getSessionIDFromCookie(r)
 	if err == nil {
 		s.store.DeleteSession(sessionID)
 	}
-	http.SetCookie(w, auth.ClearSessionCookie(s.cfg.CookieDomain))
+	http.SetCookie(w, auth.ClearSessionCookie(s.cfg.CookieDomain, !s.cfg.InsecureCookie))
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
@@ -418,10 +437,10 @@ func (s *Server) createSessionAndRedirect(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	http.SetCookie(w, auth.NewSessionCookie(sessionID, s.cfg.CookieSecret, s.cfg.CookieDomain, s.cfg.SessionTTL))
+	http.SetCookie(w, auth.NewSessionCookie(sessionID, s.cfg.CookieSecret, s.cfg.CookieDomain, s.cfg.SessionTTL, !s.cfg.InsecureCookie))
 
 	if !auth.ValidateRedirectURL(rd, s.cfg.CookieDomain) {
-		rd = "/"
+		rd = "/status"
 	}
 	http.Redirect(w, r, rd, http.StatusFound)
 }
