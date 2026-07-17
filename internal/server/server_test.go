@@ -322,6 +322,51 @@ func TestOpenRedirectProtection(t *testing.T) {
 	}
 }
 
+func TestCSRF_Rejection(t *testing.T) {
+	ts, _, st := testServer(t)
+	setupComplete(t, st)
+
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	// POST without any CSRF token
+	form := url.Values{
+		"code": {"123456"},
+		"rd":   {"https://app.test.local/"},
+	}
+	req, _ := http.NewRequest("POST", ts.URL+"/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	loc, _ := url.QueryUnescape(resp.Header.Get("Location"))
+	if !strings.Contains(loc, "CSRF") {
+		t.Errorf("expected CSRF rejection, got redirect to: %s", loc)
+	}
+
+	// POST with wrong CSRF token (valid cookie but mismatched form token)
+	loginResp, _ := client.Get(ts.URL + "/login")
+	loginResp.Body.Close()
+	csrfCookie := getCookieValue(loginResp.Cookies(), csrfCookieName)
+
+	form.Set("csrf_token", "wrong-token-value")
+	req, _ = http.NewRequest("POST", ts.URL+"/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfCookie})
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	loc, _ = url.QueryUnescape(resp.Header.Get("Location"))
+	if !strings.Contains(loc, "CSRF") {
+		t.Errorf("expected CSRF rejection for wrong token, got redirect to: %s", loc)
+	}
+}
+
 func extractCSRFToken(html string) string {
 	idx := strings.Index(html, `name="csrf_token" value="`)
 	if idx == -1 {
