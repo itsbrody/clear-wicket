@@ -184,13 +184,23 @@ func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := auth.GenerateSecret("Clear Wicket", "admin")
+	// Reuse pending secret on page refresh instead of generating a new one
+	secret, err := s.store.GetPendingSecret()
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		key, err := auth.GenerateSecret("Clear Wicket", "admin")
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		secret = key.Secret()
+		if err := s.store.SetPendingSecret(secret); err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 	}
 
-	qrPNG, err := qrcode.Encode(key.URL(), qrcode.Medium, 200)
+	otpauthURL := fmt.Sprintf("otpauth://totp/Clear%%20Wicket:admin?secret=%s&issuer=Clear%%20Wicket&algorithm=SHA1&digits=6&period=30", secret)
+	qrPNG, err := qrcode.Encode(otpauthURL, qrcode.Medium, 200)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -201,7 +211,7 @@ func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 
 	data := map[string]any{
 		"QRCode":    base64.StdEncoding.EncodeToString(qrPNG),
-		"Secret":    key.Secret(),
+		"Secret":    secret,
 		"CSRFToken": csrfToken,
 		"Error":     r.URL.Query().Get("error"),
 	}
@@ -226,7 +236,11 @@ func (s *Server) handleSetupSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secret := r.FormValue("secret")
+	secret, err := s.store.GetPendingSecret()
+	if err != nil {
+		http.Redirect(w, r, "/setup?error="+url.QueryEscape("Kein ausstehender Setup-Vorgang. Bitte erneut starten."), http.StatusFound)
+		return
+	}
 	code := strings.TrimSpace(r.FormValue("code"))
 
 	result := auth.ValidateTOTP(secret, code, s.cfg.TOTPSkew, 0)
@@ -282,9 +296,33 @@ func (s *Server) handleSetupConfirmBackups(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+	s.store.ClearPendingSecret()
 
 	log.Println("Setup completed")
 	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+func (s *Server) handleRegenerateBackupCodesPage(w http.ResponseWriter, r *http.Request) {
+	sessionID, err := s.getSessionIDFromCookie(r)
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	sess, err := s.store.GetSession(sessionID)
+	if err != nil || time.Now().After(sess.ExpiresAt) {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	_ = sess
+
+	csrfToken, csrfCookie := s.generateCSRF()
+	http.SetCookie(w, csrfCookie)
+
+	data := map[string]any{
+		"CSRFToken": csrfToken,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	templates.ExecuteTemplate(w, "regenerate_confirm.html", data)
 }
 
 func (s *Server) handleRegenerateBackupCodes(w http.ResponseWriter, r *http.Request) {

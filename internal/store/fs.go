@@ -213,6 +213,35 @@ func (s *FSStore) MarkSetupComplete() error {
 	return os.WriteFile(filepath.Join(s.dir, "setup_complete"), []byte{}, 0600)
 }
 
+func (s *FSStore) GetPendingSecret() (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	data, err := os.ReadFile(filepath.Join(s.dir, "pending_secret"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (s *FSStore) SetPendingSecret(secret string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return os.WriteFile(filepath.Join(s.dir, "pending_secret"), []byte(secret), 0600)
+}
+
+func (s *FSStore) ClearPendingSecret() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := os.Remove(filepath.Join(s.dir, "pending_secret"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
 func (s *FSStore) listUsersLocked() ([]User, error) {
 	var users []User
 	if err := s.readJSON("users.json", &users); err != nil {

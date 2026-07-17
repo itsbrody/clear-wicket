@@ -45,4 +45,8 @@ type Store interface {
 
 	IsSetupComplete() (bool, error)
 	MarkSetupComplete() error
+
+	GetPendingSecret() (string, error)
+	SetPendingSecret(secret string) error
+	ClearPendingSecret() error
 }

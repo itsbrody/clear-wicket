@@ -35,6 +35,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /setup", s.handleSetupPage)
 	s.mux.HandleFunc("POST /setup", s.handleSetupSubmit)
 	s.mux.HandleFunc("POST /setup/confirm", s.handleSetupConfirmBackups)
+	s.mux.HandleFunc("GET /backup-codes/regenerate", s.handleRegenerateBackupCodesPage)
 	s.mux.HandleFunc("POST /backup-codes/regenerate", s.handleRegenerateBackupCodes)
 	s.mux.HandleFunc("GET /logout", s.handleLogout)
 }
