@@ -136,6 +136,10 @@ At <15 MB per container, running one per app is negligible overhead.
 
 If a Traefik router has both a wildcard instance (`.example.com`) and a dedicated instance (`app1.example.com`) as forwardAuth middleware, the user must pass both TOTP checks sequentially — or Traefik silently uses only the last middleware (depending on version and config). Either way, the result is unintended. Pick one variant per router.
 
+### Platform-Specific Guides
+
+- [Deploying on Coolify](docs/coolify.md)
+
 ## Security Model
 
 ### What Clear Wicket does
