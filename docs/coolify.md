@@ -43,6 +43,22 @@ chown -R 65534:65534 /data/coolify/services/totp
 
 Clear Wicket runs as UID 65534 (non-root). Coolify creates bind mounts owned by root — without `chown`, the container cannot write its state files and will crash with `permission denied`.
 
+### Health Check (optional)
+
+The Dockerfile includes an optional health check (commented out). You can either uncomment it in the Dockerfile or configure the health check in Coolify's Healthcheck settings:
+
+| Setting | Value |
+|---|---|
+| **Method** | `GET` |
+| **Scheme** | `http` |
+| **Host** | `localhost` |
+| **Port** | `4181` |
+| **Path** | `/health` |
+| **Return Code** | `200` |
+| **Interval (s)** | `300` (or whatever suits your setup) |
+
+Click **Enable Healthcheck** and **Save**.
+
 ## Step 2 — Add Traefik Labels to Clear Wicket
 
 In Coolify's label editor for the Clear Wicket resource, add the forwardAuth middleware definition. Use the fixed container name from Step 1:

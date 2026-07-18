@@ -14,5 +14,5 @@ COPY --from=builder /clear-wicket /clear-wicket
 COPY --from=builder --chown=65534:65534 /data /data
 USER 65534:65534
 EXPOSE 4181
-HEALTHCHECK --interval=30s --timeout=3s CMD ["/clear-wicket", "healthcheck"]
+# HEALTHCHECK --interval=5m --timeout=3s CMD ["/clear-wicket", "healthcheck"]
 ENTRYPOINT ["/clear-wicket"]

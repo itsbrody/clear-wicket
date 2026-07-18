@@ -176,7 +176,7 @@ clear-wicket
 # Reset all state (re-opens setup flow)
 clear-wicket reset
 
-# Health check (used by Docker HEALTHCHECK)
+# Health check (for use by your orchestrator)
 clear-wicket healthcheck
 ```
 
