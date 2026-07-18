@@ -45,19 +45,18 @@ Clear Wicket runs as UID 65534 (non-root). Coolify creates bind mounts owned by 
 
 ### Health Check (optional)
 
-The Dockerfile includes an optional health check (commented out). You can either uncomment it in the Dockerfile or configure the health check in Coolify's Healthcheck settings:
+The Dockerfile includes a commented-out health check. To enable it, uncomment the `HEALTHCHECK` line in the Dockerfile and adjust the interval to your needs.
 
-| Setting | Value |
-|---|---|
-| **Method** | `GET` |
-| **Scheme** | `http` |
-| **Host** | `localhost` |
-| **Port** | `4181` |
-| **Path** | `/health` |
-| **Return Code** | `200` |
-| **Interval (s)** | `300` (or whatever suits your setup) |
+If Coolify's built-in Healthcheck settings do not take effect (observed in Coolify v4.1.2), you can add the health check directly to the generated Compose file on the host after deployment:
 
-Click **Enable Healthcheck** and **Save**.
+```yaml
+healthcheck:
+  test: ["CMD", "/clear-wicket", "healthcheck"]
+  interval: 5m
+  timeout: 3s
+```
+
+Then apply with `docker compose up -d <service-name>`. Note that Coolify regenerates the Compose file on each deploy, so this change must be reapplied after redeployment.
 
 ## Step 2 — Add Traefik Labels to Clear Wicket
 
