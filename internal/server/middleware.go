@@ -5,7 +5,9 @@ package server
 
 import (
 	"log"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -52,7 +54,14 @@ func (rw *responseWriter) WriteHeader(code int) {
 
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return xff
+		if i := strings.Index(xff, ","); i != -1 {
+			xff = xff[:i]
+		}
+		return strings.TrimSpace(xff)
 	}
-	return r.RemoteAddr
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
