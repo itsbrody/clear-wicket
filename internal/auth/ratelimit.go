@@ -28,8 +28,10 @@ func CheckRateLimit(entry *store.RateEntry, isBackupCode bool) RateLimitResult {
 	}
 
 	threshold := totpMaxFailures
+	multiplier := baseBackoffSeconds
 	if isBackupCode {
 		threshold = backupMaxFailures
+		multiplier = backupBackoffMulti
 	}
 
 	if entry.Failures < threshold {
@@ -37,9 +39,11 @@ func CheckRateLimit(entry *store.RateEntry, isBackupCode bool) RateLimitResult {
 	}
 
 	if !entry.LockedUntil.IsZero() && time.Now().Before(entry.LockedUntil) {
+		exponent := entry.Failures - threshold
+		backoff := multiplier * math.Pow(2, float64(exponent))
 		return RateLimitResult{
 			Allowed:    false,
-			RetryAfter: time.Until(entry.LockedUntil),
+			RetryAfter: time.Duration(backoff * float64(time.Second)),
 		}
 	}
 

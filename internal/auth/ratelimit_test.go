@@ -34,8 +34,24 @@ func TestCheckRateLimit_TOTPThreshold(t *testing.T) {
 	if result.Allowed {
 		t.Error("at TOTP threshold with active lock should be blocked")
 	}
-	if result.RetryAfter <= 0 {
-		t.Error("RetryAfter should be positive")
+	expected := time.Duration(1 * float64(time.Second))
+	if result.RetryAfter != expected {
+		t.Errorf("expected RetryAfter %v (total lockout), got %v", expected, result.RetryAfter)
+	}
+}
+
+func TestCheckRateLimit_RetryAfterIsTotal(t *testing.T) {
+	entry := &store.RateEntry{
+		Failures:    7,
+		LockedUntil: time.Now().Add(2 * time.Second),
+	}
+	result := CheckRateLimit(entry, false)
+	if result.Allowed {
+		t.Fatal("should be blocked")
+	}
+	expected := 4 * time.Second
+	if result.RetryAfter != expected {
+		t.Errorf("RetryAfter should be total lockout duration (%v), not remaining time, got %v", expected, result.RetryAfter)
 	}
 }
 
