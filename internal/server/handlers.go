@@ -103,13 +103,6 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	rd := r.FormValue("rd")
 	isBackup := r.FormValue("mode") == "backup"
 
-	rateEntry, _ := s.store.GetRateEntry(ip)
-	result := auth.CheckRateLimit(rateEntry, isBackup)
-	if !result.Allowed {
-		s.loginError(w, r, fmt.Sprintf("Zu viele Fehlversuche. Bitte in %d Sekunden erneut versuchen.", int(result.RetryAfter.Seconds())+1))
-		return
-	}
-
 	user, err := s.resolveUser()
 	if err != nil {
 		s.loginError(w, r, "Kein Benutzer konfiguriert.")
@@ -122,21 +115,28 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	totpResult := auth.ValidateTOTP(user.TOTPSecret, code, s.cfg.TOTPSkew, user.LastTOTPStep)
-	if !totpResult.Valid {
-		s.recordLoginFailure(ip, isBackup)
-		log.Printf("TOTP login failed ip=%s", ip)
-		s.loginError(w, r, "Ungültiger Code.")
+	if totpResult.Valid {
+		s.store.ModifyUser(user.ID, func(u *store.User) error {
+			u.LastTOTPStep = totpResult.Step
+			return nil
+		})
+		s.store.ClearRateEntry(ip)
+		log.Printf("TOTP login success ip=%s user=%s", ip, user.ID)
+		s.createSessionAndRedirect(w, r, user, rd)
 		return
 	}
 
-	s.store.ModifyUser(user.ID, func(u *store.User) error {
-		u.LastTOTPStep = totpResult.Step
-		return nil
-	})
-	s.store.ClearRateEntry(ip)
-	log.Printf("TOTP login success ip=%s user=%s", ip, user.ID)
+	rateEntry, _ := s.store.GetRateEntry(ip)
+	result := auth.CheckRateLimit(rateEntry, isBackup)
+	if !result.Allowed {
+		log.Printf("TOTP login rate-limited ip=%s", ip)
+		s.loginError(w, r, fmt.Sprintf("Zu viele Fehlversuche. Bitte in %d Sekunden erneut versuchen.", int(result.RetryAfter.Seconds())+1))
+		return
+	}
 
-	s.createSessionAndRedirect(w, r, user, rd)
+	s.recordLoginFailure(ip, isBackup)
+	log.Printf("TOTP login failed ip=%s", ip)
+	s.loginError(w, r, "Ungültiger Code.")
 }
 
 func (s *Server) handleBackupCodeLogin(w http.ResponseWriter, r *http.Request, user *store.User, code, rd, ip string) {
@@ -150,42 +150,50 @@ func (s *Server) handleBackupCodeLogin(w http.ResponseWriter, r *http.Request, u
 		remaining = countRemainingCodes(u.BackupCodes)
 		return nil
 	})
-	if err != nil {
-		s.recordLoginFailure(ip, true)
-		log.Printf("Backup code login failed ip=%s", ip)
-		s.loginError(w, r, "Ungültiger Backup-Code.")
+	if err == nil {
+		s.store.ClearRateEntry(ip)
+		log.Printf("Backup code login success ip=%s user=%s", ip, user.ID)
+
+		sessionID, err := auth.GenerateSessionID()
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		sess := &store.Session{
+			ID:        sessionID,
+			UserID:    user.ID,
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(s.cfg.SessionTTL),
+			IP:        ip,
+		}
+		s.store.CreateSession(sess)
+		http.SetCookie(w, auth.NewSessionCookie(sessionID, s.cfg.CookieSecret, s.cfg.CookieDomain, s.cfg.SessionTTL, !s.cfg.InsecureCookie))
+
+		if !auth.ValidateRedirectURL(rd, s.cfg.CookieDomain) {
+			rd = "/"
+		}
+
+		data := map[string]any{
+			"Remaining":  remaining,
+			"IsLastCode": remaining == 0,
+			"Redirect":   rd,
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		templates.ExecuteTemplate(w, "backup_warning.html", data)
 		return
 	}
 
-	s.store.ClearRateEntry(ip)
-	log.Printf("Backup code login success ip=%s user=%s", ip, user.ID)
-
-	sessionID, err := auth.GenerateSessionID()
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	rateEntry, _ := s.store.GetRateEntry(ip)
+	result := auth.CheckRateLimit(rateEntry, true)
+	if !result.Allowed {
+		log.Printf("Backup code login rate-limited ip=%s", ip)
+		s.loginError(w, r, fmt.Sprintf("Zu viele Fehlversuche. Bitte in %d Sekunden erneut versuchen.", int(result.RetryAfter.Seconds())+1))
 		return
 	}
-	sess := &store.Session{
-		ID:        sessionID,
-		UserID:    user.ID,
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(s.cfg.SessionTTL),
-		IP:        ip,
-	}
-	s.store.CreateSession(sess)
-	http.SetCookie(w, auth.NewSessionCookie(sessionID, s.cfg.CookieSecret, s.cfg.CookieDomain, s.cfg.SessionTTL, !s.cfg.InsecureCookie))
 
-	if !auth.ValidateRedirectURL(rd, s.cfg.CookieDomain) {
-		rd = "/"
-	}
-
-	data := map[string]any{
-		"Remaining":  remaining,
-		"IsLastCode": remaining == 0,
-		"Redirect":   rd,
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	templates.ExecuteTemplate(w, "backup_warning.html", data)
+	s.recordLoginFailure(ip, true)
+	log.Printf("Backup code login failed ip=%s", ip)
+	s.loginError(w, r, "Ungültiger Backup-Code.")
 }
 
 func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
