@@ -279,8 +279,8 @@ func TestRateLimit(t *testing.T) {
 
 	loc := resp.Header.Get("Location")
 	decodedLoc, _ := url.QueryUnescape(loc)
-	if !strings.Contains(decodedLoc, "Zu viele") {
-		t.Errorf("expected rate limit error, got redirect to: %s", decodedLoc)
+	if !strings.Contains(decodedLoc, "retry=") {
+		t.Errorf("expected rate limit with retry parameter, got redirect to: %s", decodedLoc)
 	}
 }
 

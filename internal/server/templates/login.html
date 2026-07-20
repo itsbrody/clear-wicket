@@ -24,7 +24,7 @@ button:hover{background:#3a7bc8}
 <body>
 <div class="card">
 <h1>{{if .BackupMode}}Backup-Code{{else}}Authentifizierung{{end}}</h1>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Error}}<div class="error">{{.Error}}{{if .RetrySeconds}} Nächster Versuch in <span id="countdown">{{.RetrySeconds}}</span>s.{{end}}</div>{{end}}
 <form method="POST" action="/login">
 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 <input type="hidden" name="rd" value="{{.Redirect}}">
@@ -44,5 +44,17 @@ button:hover{background:#3a7bc8}
 <div class="switch"><a href="/login?rd={{.Redirect}}&mode=backup">Backup-Code verwenden</a></div>
 {{end}}
 </div>
+{{if .RetrySeconds}}<script>
+(function(){
+var el=document.getElementById("countdown");
+if(!el)return;
+var n=parseInt(el.textContent,10);
+var t=setInterval(function(){
+n--;
+if(n<=0){clearInterval(t);el.parentElement.style.display="none";}
+else{el.textContent=n;}
+},1000);
+})();
+</script>{{end}}
 </body>
 </html>

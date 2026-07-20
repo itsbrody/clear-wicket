@@ -77,11 +77,17 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	rd := r.URL.Query().Get("rd")
 	backupMode := r.URL.Query().Get("mode") == "backup"
 
+	var retrySeconds int
+	if v := r.URL.Query().Get("retry"); v != "" {
+		fmt.Sscanf(v, "%d", &retrySeconds)
+	}
+
 	data := map[string]any{
-		"CSRFToken":  csrfToken,
-		"Redirect":   rd,
-		"BackupMode": backupMode,
-		"Error":      r.URL.Query().Get("error"),
+		"CSRFToken":    csrfToken,
+		"Redirect":     rd,
+		"BackupMode":   backupMode,
+		"Error":        r.URL.Query().Get("error"),
+		"RetrySeconds": retrySeconds,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	templates.ExecuteTemplate(w, "login.html", data)
@@ -126,15 +132,14 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rateEntry, _ := s.store.GetRateEntry(ip)
-	result := auth.CheckRateLimit(rateEntry, isBackup)
+	result := s.recordLoginFailure(ip, isBackup)
 	if !result.Allowed {
-		log.Printf("TOTP login rate-limited ip=%s", ip)
-		s.loginError(w, r, fmt.Sprintf("Zu viele Fehlversuche. Bitte in %d Sekunden erneut versuchen.", int(result.RetryAfter.Seconds())+1))
+		retryS := int(result.RetryAfter.Seconds()) + 1
+		log.Printf("TOTP login failed+locked ip=%s retry=%ds", ip, retryS)
+		s.loginError(w, r, "Ungültiger Code.", retryS)
 		return
 	}
 
-	s.recordLoginFailure(ip, isBackup)
 	log.Printf("TOTP login failed ip=%s", ip)
 	s.loginError(w, r, "Ungültiger Code.")
 }
@@ -183,15 +188,14 @@ func (s *Server) handleBackupCodeLogin(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 
-	rateEntry, _ := s.store.GetRateEntry(ip)
-	result := auth.CheckRateLimit(rateEntry, true)
+	result := s.recordLoginFailure(ip, true)
 	if !result.Allowed {
-		log.Printf("Backup code login rate-limited ip=%s", ip)
-		s.loginError(w, r, fmt.Sprintf("Zu viele Fehlversuche. Bitte in %d Sekunden erneut versuchen.", int(result.RetryAfter.Seconds())+1))
+		retryS := int(result.RetryAfter.Seconds()) + 1
+		log.Printf("Backup code login failed+locked ip=%s retry=%ds", ip, retryS)
+		s.loginError(w, r, "Ungültiger Backup-Code.", retryS)
 		return
 	}
 
-	s.recordLoginFailure(ip, true)
 	log.Printf("Backup code login failed ip=%s", ip)
 	s.loginError(w, r, "Ungültiger Backup-Code.")
 }
@@ -491,20 +495,27 @@ func (s *Server) createSessionAndRedirect(w http.ResponseWriter, r *http.Request
 	http.Redirect(w, r, rd, http.StatusFound)
 }
 
-func (s *Server) loginError(w http.ResponseWriter, r *http.Request, msg string) {
+func (s *Server) loginError(w http.ResponseWriter, r *http.Request, msg string, retrySeconds ...int) {
 	rd := r.FormValue("rd")
 	mode := r.FormValue("mode")
 	target := fmt.Sprintf("/login?error=%s&rd=%s", url.QueryEscape(msg), url.QueryEscape(rd))
 	if mode == "backup" {
 		target += "&mode=backup"
 	}
+	if len(retrySeconds) > 0 && retrySeconds[0] > 0 {
+		target += fmt.Sprintf("&retry=%d", retrySeconds[0])
+	}
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
-func (s *Server) recordLoginFailure(ip string, isBackup bool) {
+func (s *Server) recordLoginFailure(ip string, isBackup bool) auth.RateLimitResult {
+	var result auth.RateLimitResult
 	s.store.UpdateRateEntry(ip, func(entry *store.RateEntry) *store.RateEntry {
-		return auth.RecordFailure(entry, isBackup)
+		entry = auth.RecordFailure(entry, isBackup)
+		result = auth.CheckRateLimit(entry, isBackup)
+		return entry
 	})
+	return result
 }
 
 var errBackupCodeInvalid = errors.New("invalid backup code")
