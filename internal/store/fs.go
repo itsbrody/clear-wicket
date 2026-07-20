@@ -175,6 +175,53 @@ func (s *FSStore) SetRateEntry(r *RateEntry) error {
 	return s.writeJSON("ratelimit.json", entries)
 }
 
+func (s *FSStore) UpdateRateEntry(ip string, fn func(*RateEntry) *RateEntry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var entries []RateEntry
+	_ = s.readJSON("ratelimit.json", &entries)
+	var entry *RateEntry
+	idx := -1
+	for i := range entries {
+		if entries[i].IP == ip {
+			entry = &entries[i]
+			idx = i
+			break
+		}
+	}
+	if entry == nil {
+		entry = &RateEntry{IP: ip}
+	}
+	entry = fn(entry)
+	if idx >= 0 {
+		entries[idx] = *entry
+	} else {
+		entries = append(entries, *entry)
+	}
+	return s.writeJSON("ratelimit.json", entries)
+}
+
+func (s *FSStore) ModifyUser(id string, fn func(*User) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var users []User
+	if err := s.readJSON("users.json", &users); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrNotFound
+		}
+		return err
+	}
+	for i := range users {
+		if users[i].ID == id {
+			if err := fn(&users[i]); err != nil {
+				return err
+			}
+			return s.writeJSON("users.json", users)
+		}
+	}
+	return ErrNotFound
+}
+
 func (s *FSStore) ClearRateEntry(ip string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

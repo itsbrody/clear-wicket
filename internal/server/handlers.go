@@ -110,15 +110,14 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	users, err := s.store.ListUsers()
-	if err != nil || len(users) == 0 {
+	user, err := s.resolveUser()
+	if err != nil {
 		s.loginError(w, r, "Kein Benutzer konfiguriert.")
 		return
 	}
-	user := users[0]
 
 	if isBackup {
-		s.handleBackupCodeLogin(w, r, &user, code, rd, ip)
+		s.handleBackupCodeLogin(w, r, user, code, rd, ip)
 		return
 	}
 
@@ -130,29 +129,36 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user.LastTOTPStep = totpResult.Step
-	s.store.UpdateUser(&user)
+	s.store.ModifyUser(user.ID, func(u *store.User) error {
+		u.LastTOTPStep = totpResult.Step
+		return nil
+	})
 	s.store.ClearRateEntry(ip)
 	log.Printf("TOTP login success ip=%s user=%s", ip, user.ID)
 
-	s.createSessionAndRedirect(w, r, &user, rd)
+	s.createSessionAndRedirect(w, r, user, rd)
 }
 
 func (s *Server) handleBackupCodeLogin(w http.ResponseWriter, r *http.Request, user *store.User, code, rd, ip string) {
-	idx := auth.VerifyBackupCode(code, user.BackupCodes)
-	if idx == -1 {
+	var remaining int
+	err := s.store.ModifyUser(user.ID, func(u *store.User) error {
+		idx := auth.VerifyBackupCode(code, u.BackupCodes)
+		if idx == -1 {
+			return errBackupCodeInvalid
+		}
+		u.BackupCodes[idx] = ""
+		remaining = countRemainingCodes(u.BackupCodes)
+		return nil
+	})
+	if err != nil {
 		s.recordLoginFailure(ip, true)
 		log.Printf("Backup code login failed ip=%s", ip)
 		s.loginError(w, r, "Ungültiger Backup-Code.")
 		return
 	}
 
-	user.BackupCodes[idx] = ""
-	s.store.UpdateUser(user)
 	s.store.ClearRateEntry(ip)
 	log.Printf("Backup code login success ip=%s user=%s", ip, user.ID)
-
-	remaining := countRemainingCodes(user.BackupCodes)
 
 	sessionID, err := auth.GenerateSessionID()
 	if err != nil {
@@ -429,6 +435,19 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 // --- helpers ---
 
+// resolveUser returns the active user. Current implementation: single-user
+// (first registered user). Replace this method for multi-user support.
+func (s *Server) resolveUser() (*store.User, error) {
+	users, err := s.store.ListUsers()
+	if err != nil {
+		return nil, err
+	}
+	if len(users) == 0 {
+		return nil, errors.New("no users configured")
+	}
+	return &users[0], nil
+}
+
 func (s *Server) getSessionIDFromCookie(r *http.Request) (string, error) {
 	cookie, err := r.Cookie(auth.SessionCookieName)
 	if err != nil {
@@ -475,15 +494,12 @@ func (s *Server) loginError(w http.ResponseWriter, r *http.Request, msg string) 
 }
 
 func (s *Server) recordLoginFailure(ip string, isBackup bool) {
-	entry, err := s.store.GetRateEntry(ip)
-	if err != nil && errors.Is(err, store.ErrNotFound) {
-		entry = &store.RateEntry{IP: ip}
-	} else if err != nil {
-		return
-	}
-	entry = auth.RecordFailure(entry, isBackup)
-	s.store.SetRateEntry(entry)
+	s.store.UpdateRateEntry(ip, func(entry *store.RateEntry) *store.RateEntry {
+		return auth.RecordFailure(entry, isBackup)
+	})
 }
+
+var errBackupCodeInvalid = errors.New("invalid backup code")
 
 const csrfCookieName = "clear_wicket_csrf"
 

@@ -42,6 +42,9 @@ type Store interface {
 	GetRateEntry(ip string) (*RateEntry, error)
 	SetRateEntry(r *RateEntry) error
 	ClearRateEntry(ip string) error
+	UpdateRateEntry(ip string, fn func(*RateEntry) *RateEntry) error
+
+	ModifyUser(id string, fn func(*User) error) error
 
 	IsSetupComplete() (bool, error)
 	MarkSetupComplete() error

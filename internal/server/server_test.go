@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -280,6 +281,122 @@ func TestRateLimit(t *testing.T) {
 	decodedLoc, _ := url.QueryUnescape(loc)
 	if !strings.Contains(decodedLoc, "Zu viele") {
 		t.Errorf("expected rate limit error, got redirect to: %s", decodedLoc)
+	}
+}
+
+func TestRateLimit_ConcurrentFailures(t *testing.T) {
+	ts, _, st := testServer(t)
+	setupComplete(t, st)
+
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	const attempts = 10
+	var wg sync.WaitGroup
+	wg.Add(attempts)
+
+	for i := 0; i < attempts; i++ {
+		go func() {
+			defer wg.Done()
+			loginResp, _ := client.Get(ts.URL + "/login")
+			loginBody, _ := io.ReadAll(loginResp.Body)
+			loginResp.Body.Close()
+
+			csrfCookie := getCookieValue(loginResp.Cookies(), csrfCookieName)
+			csrfToken := extractCSRFToken(string(loginBody))
+
+			form := url.Values{
+				"code":       {"000000"},
+				"csrf_token": {csrfToken},
+				"rd":         {"https://app.test.local/"},
+			}
+			req, _ := http.NewRequest("POST", ts.URL+"/login", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("X-Forwarded-For", "10.0.0.1")
+			req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfCookie})
+			resp, _ := client.Do(req)
+			resp.Body.Close()
+		}()
+	}
+	wg.Wait()
+
+	entry, err := st.GetRateEntry("10.0.0.1")
+	if err != nil {
+		t.Fatalf("GetRateEntry: %v", err)
+	}
+	if entry.Failures != attempts {
+		t.Errorf("expected %d failures, got %d (lost updates from concurrent requests)", attempts, entry.Failures)
+	}
+}
+
+func TestBackupCode_ConcurrentConsumption(t *testing.T) {
+	ts, cfg, st := testServer(t)
+	user := setupComplete(t, st)
+
+	plaintexts, hashes, _ := auth.GenerateBackupCodes(5)
+	user.BackupCodes = hashes
+	st.UpdateUser(user)
+
+	sessionID, _ := auth.GenerateSessionID()
+	sess := &store.Session{
+		ID:        sessionID,
+		UserID:    user.ID,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	st.CreateSession(sess)
+	_ = cfg
+
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	successes := make(chan bool, 10)
+	var wg sync.WaitGroup
+
+	code := plaintexts[0]
+	wg.Add(5)
+	for i := 0; i < 5; i++ {
+		go func() {
+			defer wg.Done()
+			loginResp, _ := client.Get(ts.URL + "/login?mode=backup")
+			loginBody, _ := io.ReadAll(loginResp.Body)
+			loginResp.Body.Close()
+
+			csrfCookie := getCookieValue(loginResp.Cookies(), csrfCookieName)
+			csrfToken := extractCSRFToken(string(loginBody))
+
+			form := url.Values{
+				"code":       {code},
+				"mode":       {"backup"},
+				"csrf_token": {csrfToken},
+				"rd":         {"https://app.test.local/"},
+			}
+			req, _ := http.NewRequest("POST", ts.URL+"/login", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("X-Forwarded-For", "10.0.0.2")
+			req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfCookie})
+			resp, _ := client.Do(req)
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			isSuccess := resp.StatusCode == 200 && strings.Contains(string(body), "Backup")
+			successes <- isSuccess
+		}()
+	}
+	wg.Wait()
+	close(successes)
+
+	successCount := 0
+	for s := range successes {
+		if s {
+			successCount++
+		}
+	}
+
+	if successCount > 1 {
+		t.Errorf("backup code was consumed %d times, expected at most 1 (race condition)", successCount)
 	}
 }
 

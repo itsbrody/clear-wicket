@@ -4,6 +4,7 @@
 package store
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -163,6 +164,122 @@ func TestRateEntryCRUD(t *testing.T) {
 	}
 	if _, err := s.GetRateEntry("1.2.3.4"); err != ErrNotFound {
 		t.Error("expected ErrNotFound after clear")
+	}
+}
+
+func TestUpdateRateEntry_Atomic(t *testing.T) {
+	s := newTestStore(t)
+	const goroutines = 50
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			s.UpdateRateEntry("1.2.3.4", func(e *RateEntry) *RateEntry {
+				e.Failures++
+				return e
+			})
+		}()
+	}
+	wg.Wait()
+
+	got, err := s.GetRateEntry("1.2.3.4")
+	if err != nil {
+		t.Fatalf("GetRateEntry: %v", err)
+	}
+	if got.Failures != goroutines {
+		t.Errorf("expected %d failures, got %d (lost updates)", goroutines, got.Failures)
+	}
+}
+
+func TestUpdateRateEntry_CreatesIfMissing(t *testing.T) {
+	s := newTestStore(t)
+
+	err := s.UpdateRateEntry("10.0.0.1", func(e *RateEntry) *RateEntry {
+		e.Failures = 1
+		e.LastFail = time.Now()
+		return e
+	})
+	if err != nil {
+		t.Fatalf("UpdateRateEntry: %v", err)
+	}
+
+	got, err := s.GetRateEntry("10.0.0.1")
+	if err != nil {
+		t.Fatalf("GetRateEntry: %v", err)
+	}
+	if got.Failures != 1 {
+		t.Errorf("expected 1 failure, got %d", got.Failures)
+	}
+}
+
+func TestModifyUser_Atomic(t *testing.T) {
+	s := newTestStore(t)
+
+	u := &User{
+		ID:          "user-1",
+		TOTPSecret:  "JBSWY3DPEHPK3PXP",
+		BackupCodes: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"},
+		CreatedAt:   time.Now(),
+	}
+	if err := s.CreateUser(u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	const goroutines = 10
+	results := make(chan int, goroutines)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			consumed := 0
+			err := s.ModifyUser("user-1", func(user *User) error {
+				for j, code := range user.BackupCodes {
+					if code != "" {
+						user.BackupCodes[j] = ""
+						consumed = 1
+						return nil
+					}
+				}
+				return ErrNotFound
+			})
+			if err == nil {
+				results <- consumed
+			}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	totalConsumed := 0
+	for c := range results {
+		totalConsumed += c
+	}
+
+	got, _ := s.GetUser("user-1")
+	remainingCodes := 0
+	for _, code := range got.BackupCodes {
+		if code != "" {
+			remainingCodes++
+		}
+	}
+
+	if totalConsumed+remainingCodes != 10 {
+		t.Errorf("consumed (%d) + remaining (%d) should equal 10 (lost or duplicated updates)", totalConsumed, remainingCodes)
+	}
+}
+
+func TestModifyUser_NotFound(t *testing.T) {
+	s := newTestStore(t)
+
+	err := s.ModifyUser("nonexistent", func(u *User) error {
+		return nil
+	})
+	if err != ErrNotFound {
+		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 
