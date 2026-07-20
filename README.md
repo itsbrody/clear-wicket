@@ -1,5 +1,8 @@
 # Clear Wicket
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
+
 A lightweight, passwordless TOTP forward-auth gateway for Traefik.
 
 Clear Wicket puts a pure TOTP layer (RFC 6238) in front of any service — as a standalone second factor or as the sole access control, without its own password system.
@@ -206,6 +209,16 @@ Mount a volume to `/data` for persistent state.
 | Admin reset | CLI / state file | CLI | Admin UI | Admin Console | Config file | State file |
 | SMTP required | no | yes | for email flows | for reset flows | no | no |
 | Traefik native | yes | yes | yes | via adapter | yes | no (Nginx) |
+
+## Troubleshooting
+
+| Problem | Ursache / Lösung |
+|---|---|
+| Setup-Seite erscheint nicht | Setup wurde bereits abgeschlossen (`setup_complete` existiert). Zum Zurücksetzen: `clear-wicket reset` oder die Dateien in `DATA_DIR` löschen. |
+| TOTP-Code wird abgelehnt | Uhrzeit des Geräts prüfen (TOTP ist zeitbasiert). Bei persistenter Abweichung: `TOTP_SKEW` erhöhen (Standard: `1`). |
+| Cookie greift nicht über Subdomains | `COOKIE_DOMAIN` muss mit einem Punkt beginnen (`.example.com`), damit der Cookie für alle Subdomains gilt. |
+| Daten nach Container-Neustart weg | `/data` muss auf ein persistentes Volume gemountet sein (`volumes: - wicket-data:/data`). |
+| Alle Backup-Codes aufgebraucht | Mit TOTP einloggen, dann unter `/backup-codes/regenerate` neue Codes generieren. Falls kein TOTP-Zugang mehr besteht: `clear-wicket reset`. |
 
 ## License
 
