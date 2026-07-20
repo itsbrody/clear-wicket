@@ -1,0 +1,65 @@
+name: "🐛 Fehlermeldung"
+description: Ein Problem bei Authentifizierung, Setup oder Betrieb melden
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: vorgang
+    attributes:
+      label: Betroffener Vorgang
+      description: Bei welchem Schritt trat das Problem auf?
+      options:
+        - "Ersteinrichtung / QR-Code-Pairing"
+        - "Login mit TOTP-Code"
+        - "Weiterleitung durch Traefik nach Login"
+        - "Session / Logout"
+        - "Sonstiges"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment-Methode
+      description: Wie läuft die Gateway-Instanz bei dir?
+      options:
+        - "Docker (offizielles Image)"
+        - "Statisches Binary (direkt ausgeführt)"
+        - "Systemd-Service"
+        - "Andere / weiß ich nicht"
+    validations:
+      required: true
+
+  - type: input
+    id: traefik-version
+    attributes:
+      label: Traefik-Version (falls bekannt)
+      placeholder: "z.B. v3.1"
+    validations:
+      required: false
+
+  - type: textarea
+    id: erwartet
+    attributes:
+      label: Erwartetes Verhalten
+      description: Was hätte passieren sollen?
+    validations:
+      required: false
+
+  - type: textarea
+    id: tatsaechlich
+    attributes:
+      label: Tatsächliches Verhalten
+      description: Was ist stattdessen passiert? Fehlermeldungen/Logs gerne mit angeben.
+      placeholder: "Fehlermeldung, HTTP-Statuscode, Log-Auszug, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: sonstiges
+    attributes:
+      label: Sonstiges
+      description: Alles Weitere, das zur Einordnung hilfreich sein könnte
+    validations:
+      required: false

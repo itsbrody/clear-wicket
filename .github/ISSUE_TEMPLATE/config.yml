@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "💡 Idee oder Vorschlag?"
+    url: https://github.com/itsbrody/free-software/issues/new?template=idee-vorschlag.yml
+    about: "Ideen und Vorschläge zu allen Tools laufen zentral im free-software-Repo."
