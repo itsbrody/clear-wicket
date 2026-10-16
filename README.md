@@ -225,3 +225,11 @@ Mount a volume to `/data` for persistent state.
 Apache-2.0 — see [LICENSE](LICENSE).
 
 Copyright Clear Consulting LLC (Wolfgang Brodowski).
+
+<p align="center">
+  <a href="https://klare-beratung.de/blog/ein-totp-code-ein-cookie-fertig-warum-ich-clear-wicket-gebaut-habe?utm_source=github&utm_medium=readme&utm_campaign=clear-wicket">Hintergrund im Blog</a>
+</p>
+
+<p align="center">
+  Erstellt im Juli 2026 · Clear Consulting LLC · <a href="https://klare-beratung.de/?utm_source=github&utm_medium=readme&utm_campaign=clear-wicket">klare-beratung.de</a>
+</p>
