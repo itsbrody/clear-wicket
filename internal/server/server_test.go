@@ -505,3 +505,61 @@ func getCookieValue(cookies []*http.Cookie, name string) string {
 	}
 	return ""
 }
+
+func frameHeaders(t *testing.T, ancestors []string, path string) http.Header {
+	t.Helper()
+	dir := t.TempDir()
+	st, err := store.NewFSStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupComplete(t, st)
+	cfg := &config.Config{
+		CookieDomain:   ".test.local",
+		CookieSecret:   []byte("test-secret-32-bytes-long-xxxxx!"),
+		SessionTTL:     24 * time.Hour,
+		AuthHost:       "auth.test.local",
+		DataDir:        dir,
+		TOTPSkew:       1,
+		ListenAddr:     ":0",
+		FrameAncestors: ancestors,
+	}
+	ts := httptest.NewServer(New(cfg, st))
+	t.Cleanup(ts.Close)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := client.Get(ts.URL + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.Header
+}
+
+func TestFrameHeaders_DefaultDeniesFraming(t *testing.T) {
+	// /auth answers 302, /login 200, /nope 404: all must carry the headers.
+	for _, path := range []string{"/auth", "/login", "/nope"} {
+		h := frameHeaders(t, nil, path)
+		if h.Get("X-Frame-Options") != "DENY" {
+			t.Errorf("%s: expected X-Frame-Options DENY, got %q", path, h.Get("X-Frame-Options"))
+		}
+		if h.Get("Content-Security-Policy") != "frame-ancestors 'none'" {
+			t.Errorf("%s: unexpected CSP %q", path, h.Get("Content-Security-Policy"))
+		}
+	}
+}
+
+func TestFrameHeaders_ConfiguredAncestors(t *testing.T) {
+	want := "frame-ancestors 'self' https://cloud.example.com https://b.example.org:8443"
+	ancestors := []string{"'self'", "https://cloud.example.com", "https://b.example.org:8443"}
+	for _, path := range []string{"/auth", "/login", "/nope"} {
+		h := frameHeaders(t, ancestors, path)
+		if _, ok := h["X-Frame-Options"]; ok {
+			t.Errorf("%s: X-Frame-Options must not be sent, got %q", path, h.Get("X-Frame-Options"))
+		}
+		if h.Get("Content-Security-Policy") != want {
+			t.Errorf("%s: got CSP %q, want %q", path, h.Get("Content-Security-Policy"), want)
+		}
+	}
+}

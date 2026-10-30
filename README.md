@@ -66,6 +66,28 @@ All configuration is via environment variables.
 | `COOKIE_SECRET` | no | auto | HMAC signing key (hex). Auto-generated and persisted if not set |
 | `INSECURE_COOKIE` | no | `false` | Set `true` for local dev (disables `Secure` flag on cookies) |
 | `LISTEN_ADDR` | no | `:4181` | Listen address |
+| `FRAME_ANCESTORS` | no | — | Origins allowed to embed Clear Wicket in a frame (see [Embedding](#embedding-in-other-sites)). Unset: framing is denied |
+
+### Embedding in other sites
+
+By default Clear Wicket refuses to be framed: every response carries `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'`.
+
+To embed a protected app (and its login) in another site, for example as an external page in Nextcloud, list the embedding origins in `FRAME_ANCESTORS`, separated by spaces:
+
+```yaml
+environment:
+  FRAME_ANCESTORS: "'self' https://cloud.example.com"
+```
+
+The single quotes around `self` are part of the value.
+
+Allowed values are `'self'` and `https://host[:port]`. Wildcards, `http:`, `data:`, paths and empty entries are rejected and Clear Wicket refuses to start. With the option set, every response carries only `Content-Security-Policy: frame-ancestors <list>`, and `X-Frame-Options` is no longer sent (it cannot name a foreign origin, and some browsers would let it override the CSP).
+
+Things to know:
+
+- **Clickjacking.** Every origin you list can frame your login page and the apps behind it. List only origins you trust and control.
+- **Same site only.** The login form's CSRF cookie is `SameSite=Strict`, and the session cookie is `SameSite=Lax`. Browsers send them inside a frame only when the embedding page is on the same site (the same registrable domain, e.g. `cloud.example.com` embedding `app.example.com`). Embedding from an unrelated domain is not supported.
+- **The embedding page must allow the frame, too.** The site that embeds Clear Wicket has to permit the Clear Wicket hosts (`AUTH_HOST` and the protected apps) as frame sources in its own policy. In Nextcloud that is its CSP / external sites setting.
 
 ## Deployment Variants
 

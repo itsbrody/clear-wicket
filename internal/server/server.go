@@ -42,7 +42,7 @@ func (s *Server) routes() {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	handler := withSecurityHeaders(withRecovery(withRequestLogging(s.mux)))
+	handler := withSecurityHeaders(s.cfg.FrameAncestors, withRecovery(withRequestLogging(s.mux)))
 	handler.ServeHTTP(w, r)
 }
 

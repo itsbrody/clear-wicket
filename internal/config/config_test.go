@@ -126,3 +126,56 @@ func TestEnsureCookieSecret_FromEnv(t *testing.T) {
 		t.Fatalf("expected 32 bytes, got %d", len(cfg.CookieSecret))
 	}
 }
+
+func TestLoad_FrameAncestors(t *testing.T) {
+	setEnv(t, "COOKIE_DOMAIN", ".example.com")
+	setEnv(t, "AUTH_HOST", "auth.example.com")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.FrameAncestors) != 0 {
+		t.Errorf("expected no frame ancestors by default, got %v", cfg.FrameAncestors)
+	}
+
+	setEnv(t, "FRAME_ANCESTORS", "'self' https://cloud.example.com https://other.example.org:8443")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.FrameAncestors) != 3 || cfg.FrameAncestors[1] != "https://cloud.example.com" {
+		t.Errorf("unexpected frame ancestors: %v", cfg.FrameAncestors)
+	}
+}
+
+func TestLoad_FrameAncestorsInvalid(t *testing.T) {
+	setEnv(t, "COOKIE_DOMAIN", ".example.com")
+	setEnv(t, "AUTH_HOST", "auth.example.com")
+
+	for _, v := range []string{
+		"*",
+		"https://*.example.com",
+		"http://cloud.example.com",
+		"https:",
+		"data:",
+		"   ",
+		"self",
+		"https://cloud.example.com/path",
+		"https://cloud.example.com/",
+		"https://cloud.example.com?x=1",
+		"https://user@cloud.example.com",
+		"https://cloud.example.com:",
+		"https://cloud.example.com:0",
+		"https://cloud.example.com:99999",
+		"https://cloud.example.com,https://b.example.com",
+		"https://",
+	} {
+		t.Run(v, func(t *testing.T) {
+			setEnv(t, "FRAME_ANCESTORS", v)
+			if _, err := Load(); err == nil {
+				t.Errorf("expected error for FRAME_ANCESTORS=%q", v)
+			}
+		})
+	}
+}

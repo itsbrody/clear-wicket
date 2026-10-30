@@ -19,7 +19,7 @@ import (
 	"github.com/itsbrody/clear-wicket/internal/store"
 )
 
-const Version = "1.0.6"
+const Version = "1.1.0"
 
 func main() {
 	if len(os.Args) > 1 {

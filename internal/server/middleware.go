@@ -32,10 +32,21 @@ func withRecovery(next http.Handler) http.Handler {
 	})
 }
 
-func withSecurityHeaders(next http.Handler) http.Handler {
+// withSecurityHeaders sets the security headers on every response. Without
+// frameAncestors, framing is denied. With it, only the CSP frame-ancestors
+// directive is sent: X-Frame-Options cannot name a foreign origin and some
+// browsers would let it override the CSP.
+func withSecurityHeaders(frameAncestors []string, next http.Handler) http.Handler {
+	csp := "frame-ancestors 'none'"
+	if len(frameAncestors) > 0 {
+		csp = "frame-ancestors " + strings.Join(frameAncestors, " ")
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
+		if len(frameAncestors) == 0 {
+			w.Header().Set("X-Frame-Options", "DENY")
+		}
+		w.Header().Set("Content-Security-Policy", csp)
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
