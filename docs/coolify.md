@@ -26,6 +26,8 @@ Set a **fixed container name** (e.g. `wicket-totp`) under the Container settings
 | `AUTH_HOST` | `auth.example.com` |
 | `DATA_DIR` | `/data` |
 
+To embed protected apps in another site (for example as an external page in Nextcloud), also set `FRAME_ANCESTORS`, e.g. `https://cloud.example.com`. Set it on the Clear Wicket resource, not on the protected app. Clear Wicket sets the framing headers on all of its responses, including the redirect and the login page. Without the variable, framing stays denied. A wrong value stops the container at startup; the reason is in the container log. See [Embedding in other sites](../README.md#embedding-in-other-sites) for the allowed values and the same-site requirement.
+
 ### Volume
 
 Add a persistent volume in Coolify's Storage settings:
