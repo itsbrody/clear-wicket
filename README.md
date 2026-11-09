@@ -57,7 +57,7 @@ All configuration is via environment variables.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `COOKIE_DOMAIN` | yes | — | Domain for the session cookie. Use `.example.com` for SSO across subdomains |
+| `COOKIE_DOMAIN` | yes | — | Domain for the session cookie. Use `.example.com` for SSO across subdomains. Only defines where a login is valid, not what is protected (see note below) |
 | `AUTH_HOST` | yes | — | Hostname where Clear Wicket serves its login UI |
 | `SESSION_TTL` | no | `24h` | Session duration (Go duration format: `12h`, `30m`, etc.) |
 | `DATA_DIR` | no | `./data` | Directory for persistent state |
@@ -67,6 +67,8 @@ All configuration is via environment variables.
 | `INSECURE_COOKIE` | no | `false` | Set `true` for local dev (disables `Secure` flag on cookies) |
 | `LISTEN_ADDR` | no | `:4181` | Listen address |
 | `FRAME_ANCESTORS` | no | — | Origins allowed to embed Clear Wicket in a frame (see [Embedding](#embedding-in-other-sites)). Unset: framing is denied |
+
+> **Protection is per router, not per domain.** `COOKIE_DOMAIN` only determines for which hosts a login is valid (SSO). Clear Wicket checks only requests that pass through a Traefik router whose `middlewares` chain contains `wicket-auth`. An app without that entry stays open, even if it lives under the same domain.
 
 ### Embedding in other sites
 
@@ -99,7 +101,7 @@ Complete, ready-to-use Compose files: [`examples/docker-compose.shared.yml`](exa
 
 One Clear Wicket container, one TOTP secret, one login for all apps.
 
-You run a single `clear-wicket` container with a wildcard cookie domain (`.example.com`). All apps point their Traefik middleware at that one container. One TOTP code unlocks every app under `*.example.com` — same authenticator entry, same session cookie.
+You run a single `clear-wicket` container with a wildcard cookie domain (`.example.com`). All apps point their Traefik middleware at that one container. One TOTP code unlocks every app under `*.example.com` **that carries the `wicket-auth` middleware** — same authenticator entry, same session cookie. An app without that entry stays open, even if it lives under the same domain.
 
 ```yaml
 services:
@@ -239,6 +241,7 @@ Mount a volume to `/data` for persistent state.
 | Setup-Seite erscheint nicht | Setup wurde bereits abgeschlossen (`setup_complete` existiert). Zum Zurücksetzen: `clear-wicket reset` oder die Dateien in `DATA_DIR` löschen. |
 | TOTP-Code wird abgelehnt | Uhrzeit des Geräts prüfen (TOTP ist zeitbasiert). Bei persistenter Abweichung: `TOTP_SKEW` erhöhen (Standard: `1`). |
 | Cookie greift nicht über Subdomains | `COOKIE_DOMAIN` muss mit einem Punkt beginnen (`.example.com`), damit der Cookie für alle Subdomains gilt. |
+| App ist ohne TOTP-Abfrage erreichbar | `wicket-auth` fehlt in der `middlewares`-Kette des Routers. Der Schutz gilt pro Router, nicht pro Domain. Prüfen mit: `docker inspect <container> --format '{{range $k,$v := .Config.Labels}}{{$k}}={{$v}}{{"\n"}}{{end}}' \| grep -E 'routers\.[^.]+\.middlewares='` |
 | Daten nach Container-Neustart weg | `/data` muss auf ein persistentes Volume gemountet sein (`volumes: - wicket-data:/data`). |
 | Alle Backup-Codes aufgebraucht | Mit TOTP einloggen, dann unter `/backup-codes/regenerate` neue Codes generieren. Falls kein TOTP-Zugang mehr besteht: `clear-wicket reset`. |
 

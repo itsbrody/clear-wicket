@@ -95,6 +95,10 @@ traefik.http.routers.https-0-<app-id>.middlewares=gzip,http-basic-auth-<app-id>,
 
 Deploy the app. On the next visit, you'll be prompted for TOTP after any existing authentication.
 
+Repeat this step for every app you want to protect. Protection is per router, not per domain: an app whose router does not carry `wicket-auth` stays open, even if it lives under the same `COOKIE_DOMAIN`.
+
+> **Warning:** "Reset to default" in Coolify's label editor restores Coolify's default labels and removes a manually appended `wicket-auth`. After a reset, append the entry again.
+
 ### Network
 
 Both the Clear Wicket container and the protected app must be on the **same Docker network** (typically `coolify`). Coolify usually handles this automatically. Verify with:
@@ -111,3 +115,4 @@ docker inspect <container-name> --format '{{range $k,$v := .NetworkSettings.Netw
 | `permission denied` in container logs | Volume owned by root, container runs as UID 65534 | `chown -R 65534:65534 <volume-path>` on host |
 | 502 after redeploy | Container name changed | Set a fixed container name in Coolify |
 | forwardAuth not reachable | Containers on different networks | Ensure both are on the `coolify` network |
+| App is reachable without a TOTP prompt | `wicket-auth` is missing from the router's `middlewares` chain (protection is per router, not per domain; also happens after "Reset to default") | Check with `docker inspect <container> --format '{{range $k,$v := .Config.Labels}}{{$k}}={{$v}}{{"\n"}}{{end}}' \| grep -E 'routers\.[^.]+\.middlewares='`, then append `wicket-auth` (Step 4) |
